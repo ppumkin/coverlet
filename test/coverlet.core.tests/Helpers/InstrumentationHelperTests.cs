@@ -12,8 +12,8 @@ namespace Coverlet.Core.Helpers.Tests
         public void TestGetDependencies()
         {
             string module = typeof(InstrumentationHelperTests).Assembly.Location;
-            var modules = InstrumentationHelper.GetCoverableModules(module);
-            Assert.False(Array.Exists(modules, m => m == module));
+            var modules = InstrumentationHelper.GetCoverableModules(module, Array.Empty<string>());
+            Assert.True(Array.Exists(modules, m => m == module));
         }
 
         [Fact]
@@ -62,7 +62,6 @@ namespace Coverlet.Core.Helpers.Tests
             InstrumentationHelper.DeleteHitsFile(tempFile);
             Assert.False(File.Exists(tempFile));
         }
-
 
         public static IEnumerable<object[]> GetExcludedFilesReturnsEmptyArgs =>
         new[]
@@ -228,6 +227,27 @@ namespace Coverlet.Core.Helpers.Tests
 
             result = InstrumentationHelper.IsTypeIncluded("Module.dll", "a.b.Dto", filters);
             Assert.True(result);
+        }
+
+        [Fact]
+        public void TestIncludeDirectories()
+        {
+            string module = typeof(InstrumentationHelperTests).Assembly.Location;
+
+            var currentDirModules = InstrumentationHelper.GetCoverableModules(module,
+                new[] { Environment.CurrentDirectory });
+
+            var parentDirWildcardModules = InstrumentationHelper.GetCoverableModules(module,
+                new[] { Path.Combine(Directory.GetParent(Environment.CurrentDirectory).FullName, "*") });
+
+            // There are at least as many modules found when searching the parent directory's subdirectories
+            Assert.True(parentDirWildcardModules.Length >= currentDirModules.Length);
+
+            var relativePathModules = InstrumentationHelper.GetCoverableModules(module,
+                new[] { "." });
+
+            // Same number of modules found when using a relative path
+            Assert.Equal(currentDirModules.Length, relativePathModules.Length);
         }
 
         public static IEnumerable<object[]> ValidModuleFilterData =>

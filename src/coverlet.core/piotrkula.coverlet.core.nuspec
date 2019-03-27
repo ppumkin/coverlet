@@ -1,8 +1,7 @@
 ﻿<?xml version="1.0"?>
 <package  xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
-  <metadata>    
+  <metadata>
     <id>piotrkula.coverlet.core</id>
-    <version>1.5.2</version>
     <title>Coverlet.Core package for integrators</title>
     <authors>tonerdo</authors>
     <owners>Piotr Kula</owners>
@@ -15,5 +14,13 @@
     <copyright></copyright>
     <tags>coverage testing unit-test</tags>
     <summary>This is a fork following the Coverlet project but only building and packaging the Coverlet.Core aspect</summary>
+    <dependencies>
+      <group targetFramework=".NETStandard2.0">
+        <dependency id="Microsoft.Extensions.FileSystemGlobbing" version="2.0.1" exclude="Build,Analyzers" />
+        <dependency id="Mono.Cecil" version="0.10.1" exclude="Build,Analyzers" />
+        <dependency id="Newtonsoft.Json" version="9.0.1" exclude="Build,Analyzers" />
+        <dependency id="System.Reflection.Metadata" version="1.6.0" exclude="Build,Analyzers" />
+      </group>
+    </dependencies>
   </metadata>
 </package>

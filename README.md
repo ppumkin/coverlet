@@ -1,4 +1,4 @@
-# coverlet [![Build status](https://ci.appveyor.com/api/projects/status/6rdf00wufospr4r8/branch/master?svg=true)](https://ci.appveyor.com/project/tonerdo/coverlet) [![codecov](https://codecov.io/gh/tonerdo/coverlet/branch/master/graph/badge.svg)](https://codecov.io/gh/tonerdo/coverlet) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+# coverlet [![Build status](https://ci.appveyor.com/api/projects/status/6rdf00wufospr4r8/branch/master?svg=true)](https://ci.appveyor.com/project/tonerdo/coverlet) [![codecov](https://codecov.io/gh/tonerdo/coverlet/branch/master/graph/badge.svg)](https://codecov.io/gh/tonerdo/coverlet) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![NuGet](https://img.shields.io/nuget/v/coverlet.msbuild.svg)](https://www.nuget.org/packages/coverlet.msbuild)
 
 Coverlet is a cross platform code coverage library for .NET Core, with support for line, branch and method coverage.
 
@@ -56,18 +56,23 @@ Arguments:
   <ASSEMBLY>  Path to the test assembly.
 
 Options:
-  -h|--help          Show help information
-  -v|--version       Show version information
-  -t|--target        Path to the test runner application.
-  -a|--targetargs    Arguments to be passed to the test runner.
-  -o|--output        Output of the generated coverage report
-  -f|--format        Format of the generated coverage report.
-  --threshold        Exits with error if the coverage % is below value.
-  --threshold-type   Coverage type to apply the threshold to.
-  --exclude          Filter expressions to exclude specific modules and types.
-  --include          Filter expressions to include specific modules and types.
-  --exclude-by-file  Glob patterns specifying source files to exclude.
-  --merge-with       Path to existing coverage result to merge.
+  -h|--help               Show help information
+  -v|--version            Show version information
+  -t|--target             Path to the test runner application.
+  -a|--targetargs         Arguments to be passed to the test runner.
+  -o|--output             Output of the generated coverage report
+  -f|--format             Format of the generated coverage report.
+  --threshold             Exits with error if the coverage % is below value.
+  --threshold-type        Coverage type to apply the threshold to.
+  --threshold-stat        Coverage statistic used to enforce the threshold value.
+  --exclude               Filter expressions to exclude specific modules and types.
+  --include               Filter expressions to include specific modules and types.
+  --include-directory     Include directories containing additional assemblies to be instrumented.
+  --exclude-by-file       Glob patterns specifying source files to exclude.
+  --include-directory     Include directories containing additional assemblies to be instrumented.
+  --exclude-by-attribute  Attributes to exclude from code coverage.
+  --merge-with            Path to existing coverage result to merge.
+  --use-source-link       Specifies whether to use SourceLink URIs in place of file system paths.
 ```
 
 #### Code Coverage
@@ -98,6 +103,7 @@ Supported Formats:
 * lcov
 * opencover
 * cobertura
+* teamcity
 
 The `--format` option can be specified multiple times to output multiple formats in a single run:
 
@@ -116,6 +122,28 @@ The above command will write the results to the supplied path, if no file extens
 ```bash
 coverlet <ASSEMBLY> --target <TARGET> --targetargs <TARGETARGS> --output "/custom/directory/" -f json -f lcov
 ```
+
+#### TeamCity Output
+
+Coverlet can output basic code coverage statistics using [TeamCity service messages](https://confluence.jetbrains.com/display/TCD18/Build+Script+Interaction+with+TeamCity#BuildScriptInteractionwithTeamCity-ServiceMessages).
+
+```bash
+coverlet <ASSEMBLY> --target <TARGET> --targetargs <TARGETARGS> --output teamcity
+```
+
+The currently supported [TeamCity statistics](https://confluence.jetbrains.com/display/TCD18/Build+Script+Interaction+with+TeamCity#BuildScriptInteractionwithTeamCity-ServiceMessages) are:
+
+| TeamCity Statistic Key  | Description                    |
+| :---                    | :---                           |
+| CodeCoverageL           | Line-level code coverage       |
+| CodeCoverageR           | Branch-level code coverage     |
+| CodeCoverageM           | Method-level code coverage     |
+| CodeCoverageAbsLTotal   | The total number of lines      |
+| CodeCoverageAbsLCovered | The number of covered lines    |
+| CodeCoverageAbsRTotal   | The total number of branches   |
+| CodeCoverageAbsRCovered | The number of covered branches |
+| CodeCoverageAbsMTotal   | The total number of methods    |
+| CodeCoverageAbsMCovered | The number of covered methods  |
 
 #### Merging Results
 
@@ -147,11 +175,29 @@ You can specify the `--threshold-type` option multiple times. Valid values inclu
 coverlet <ASSEMBLY> --target <TARGET> --targetargs <TARGETARGS> --threshold 80 --threshold-type line --threshold-type method
 ```
 
+By default, Coverlet will validate the threshold value against the coverage result of each module. The `--threshold-stat` option allows you to change this behaviour and can have any of the following values:
+
+* Minimum (Default): Ensures the coverage result of each module isn't less than the threshold
+* Total: Ensures the total combined coverage result of all modules isn't less than the threshold
+* Average: Ensures the average coverage result of all modules isn't less than the threshold
+
+The following command will compare the threshold value with the overall total coverage of all modules:
+
+```bash
+coverlet <ASSEMBLY> --target <TARGET> --targetargs <TARGETARGS> --threshold 80 --threshold-type line --threshold-stat total
+```
+
 #### Excluding From Coverage
 
 ##### Attributes
 
 You can ignore a method or an entire class from code coverage by creating and applying the `ExcludeFromCodeCoverage` attribute present in the `System.Diagnostics.CodeAnalysis` namespace.
+
+You can also ignore additional attributes by using the `ExcludeByAttribute` property (short name or full name supported):
+
+```bash
+coverlet <ASSEMBLY> --target <TARGET> --targetargs <TARGETARGS> --exclude-by-attribute "Obsolete,GeneratedCodeAttribute,CompilerGeneratedAttribute"
+```
 
 ##### Source Files
 
@@ -185,10 +231,10 @@ Examples
 coverlet <ASSEMBLY> --target <TARGET> --targetargs <TARGETARGS> --exclude "[coverlet.*]Coverlet.Core.Coverage"
 ```
 
-Coverlet goes a step in the other direction by also letting you explicitly set what can be included using the `--include` option. 
+Coverlet goes a step in the other direction by also letting you explicitly set what can be included using the `--include` option.
 
 Examples
- - `--include "[*]*"` => INcludes all types in all assemblies (nothing is instrumented)
+ - `--include "[*]*"` => Includes all types in all assemblies (everything is instrumented)
  - `--include "[coverlet.*]Coverlet.Core.Coverage"` => Includes the Coverage class in the `Coverlet.Core` namespace belonging to any assembly that matches `coverlet.*` (e.g `coverlet.core`)
   - `--include "[coverlet.*.tests?]*"` => Includes all types in any assembly starting with `coverlet.` and ending with `.test` or `.tests` (the `?` makes the `s`  optional)
 
@@ -201,7 +247,7 @@ In this mode, Coverlet doesn't require any additional setup other than including
 If a property takes multiple comma-separated values please note that [you will have to add escaped quotes around the string](https://github.com/Microsoft/msbuild/issues/2999#issuecomment-366078677) like this: `/p:Exclude=\"[coverlet.*]*,[*]Coverlet.Core*\"`, `/p:Include=\"[coverlet.*]*,[*]Coverlet.Core*\"`, or `/p:CoverletOutputFormat=\"json,opencover\"`.
 
 ##### Note for Powershell / VSTS users
-To exclude or include multiple assemblies when using Powershell scripts or creating a .yaml file for a VSTS build ```%2c``` should be used as a separator. Msbuild will translate this symbol to ```,```. 
+To exclude or include multiple assemblies when using Powershell scripts or creating a .yaml file for a VSTS build ```%2c``` should be used as a separator. Msbuild will translate this symbol to ```,```.
 
 ```/p:Exclude="[*]*Examples?%2c[*]*Startup"```
 
@@ -234,6 +280,7 @@ Supported Formats:
 * lcov
 * opencover
 * cobertura
+* teamcity
 
 You can specify multiple output formats by separating them with a comma (`,`).
 
@@ -257,7 +304,7 @@ With Coverlet you can combine the output of multiple coverage runs into a single
 dotnet test /p:CollectCoverage=true /p:MergeWith='/path/to/result.json'
 ```
 
-The value given to `/p:MergeWith` **must** be a path to Coverlet's own json result format.
+The value given to `/p:MergeWith` **must** be a path to Coverlet's own json result format. The results in `result.json` will be read, and added to the new results written to by Coverlet.
 
 #### Threshold
 
@@ -275,11 +322,29 @@ dotnet test /p:CollectCoverage=true /p:Threshold=80 /p:ThresholdType=line
 
 You can specify multiple values for `ThresholdType` by separating them with commas. Valid values include `line`, `branch` and `method`.
 
+By default, Coverlet will validate the threshold value against the coverage result of each module. The `/p:ThresholdStat` option allows you to change this behaviour and can have any of the following values:
+
+* Minimum (Default): Ensures the coverage result of each module isn't less than the threshold
+* Total: Ensures the total combined coverage result of all modules isn't less than the threshold
+* Average: Ensures the average coverage result of all modules isn't less than the threshold
+
+The following command will compare the threshold value with the overall total coverage of all modules:
+
+```bash
+dotnet test /p:CollectCoverage=true /p:Threshold=80 /p:ThresholdType=line /p:ThresholdStat=total
+```
+
 #### Excluding From Coverage
 
 ##### Attributes
 
 You can ignore a method or an entire class from code coverage by creating and applying the `ExcludeFromCodeCoverage` attribute present in the `System.Diagnostics.CodeAnalysis` namespace.
+
+You can also ignore additional attributes by using the `ExcludeByAttribute` property (short name or full name supported):
+
+```bash
+dotnet test /p:CollectCoverage=true /p:ExcludeByAttribute="Obsolete,GeneratedCodeAttribute,CompilerGeneratedAttribute"
+```
 
 #### Source Files
 You can also ignore specific source files from code coverage using the `ExcludeByFile` property
@@ -288,10 +353,10 @@ You can also ignore specific source files from code coverage using the `ExcludeB
  - Use file path or directory path with globbing (e.g `dir1/*.cs`)
 
 ```bash
-dotnet test /p:CollectCoverage=true /p:ExcludeByFile=\"../dir1/class1.cs,../dir2/*.cs,../dir3/**/*.cs,\"
+dotnet test /p:CollectCoverage=true /p:ExcludeByFile=\"../dir1/class1.cs,../dir2/*.cs,../dir3/**/*.cs\"
 ```
 
-##### Filters 
+##### Filters
 Coverlet gives the ability to have fine grained control over what gets excluded using "filter expressions".
 
 Syntax: `/p:Exclude=[Assembly-Filter]Type-Filter`
@@ -311,10 +376,10 @@ Examples
 dotnet test /p:CollectCoverage=true /p:Exclude="[coverlet.*]Coverlet.Core.Coverage"
 ```
 
-Coverlet goes a step in the other direction by also letting you explicitly set what can be included using the `Include` property. 
+Coverlet goes a step in the other direction by also letting you explicitly set what can be included using the `Include` property.
 
 Examples
- - `/p:Include="[*]*"` => INcludes all types in all assemblies (nothing is instrumented)
+ - `/p:Include="[*]*"` => Includes all types in all assemblies (everything is instrumented)
  - `/p:Include="[coverlet.*]Coverlet.Core.Coverage"` => Includes the Coverage class in the `Coverlet.Core` namespace belonging to any assembly that matches `coverlet.*` (e.g `coverlet.core`)
   - `/p:Include="[coverlet.*.tests?]*"` => Includes all types in any assembly starting with `coverlet.` and ending with `.test` or `.tests` (the `?` makes the `s`  optional)
 
@@ -322,46 +387,16 @@ Both `Exclude` and `Include` properties can be used together but `Exclude` takes
 
 You can specify multiple filter expressions by separting them with a comma (`,`).
 
+### SourceLink
+
+Coverlet supports [SourceLink](https://github.com/dotnet/sourcelink) custom debug information contained in PDBs. When you specify the `--use-source-link` flag in the global tool or `/p:UseSourceLink=true` property in the MSBuild command, Coverlet will generate results that contain the URL to the source files in your source control instead of absolute file paths.
+
 ### Cake Addin
 If you're using [Cake Build](https://cakebuild.net) for your build script you can use the [Cake.Coverlet](https://github.com/Romanx/Cake.Coverlet) addin to provide you extensions to dotnet test for passing coverlet arguments in a strongly typed manner.
 
-## Roadmap
-
-* Merging outputs (multiple test projects, one coverage result)
-* Support for more output formats (e.g. JaCoCo)
-* Console runner (removes the need for requiring a NuGet package)
-
 ## Issues & Contributions
 
-If you find a bug or have a feature request, please report them at this repository's issues section. Contributions are highly welcome, however, except for very small changes, kindly file an issue and let's have a discussion before you open a pull request.
-
-### Building The Project
-
-Clone this repo:
-
-```bash
-git clone https://github.com/tonerdo/coverlet
-```
-
-Change directory to repo root:
-
-```bash
-cd coverlet
-```
-
-Execute build script:
-
-```bash
-dotnet msbuild build.proj
-```
-
-This will result in the following:
-
-* Restore all NuGet packages required for building
-* Build and publish all projects. Final binaries are placed into `<repo_root>\build\<Configuration>`
-* Build and run tests
-
-These steps must be followed before you attempt to open the solution in an IDE (e.g. Visual Studio, Rider) for all projects to be loaded successfully.
+If you find a bug or have a feature request, please report them at this repository's issues section. See the [CONTRIBUTING GUIDE](CONTRIBUTING.md) for details on building and contributing to this project.
 
 ## Code of Conduct
 

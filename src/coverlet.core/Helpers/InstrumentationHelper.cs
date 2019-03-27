@@ -14,11 +14,45 @@ namespace Coverlet.Core.Helpers
 {
     internal static class InstrumentationHelper
     {
-        public static string[] GetCoverableModules(string module)
+        public static string[] GetCoverableModules(string module, string[] directories)
         {
-            IEnumerable<string> modules = Directory.EnumerateFiles(Path.GetDirectoryName(module)).Where(f => f.EndsWith(".exe") || f.EndsWith(".dll"));
-            modules = modules.Where(m => IsAssembly(m) && Path.GetFileName(m) != Path.GetFileName(module));
-            return modules.ToArray();
+            Debug.Assert(directories != null);
+
+            string moduleDirectory = Path.GetDirectoryName(module);
+            if (moduleDirectory == string.Empty)
+            {
+                moduleDirectory = Directory.GetCurrentDirectory();
+            }
+
+            var dirs = new List<string>()
+            {
+                // Add the test assembly's directory.
+                moduleDirectory
+            };
+
+            // Prepare all the directories we probe for modules.
+            foreach (string directory in directories)
+            {
+                if (string.IsNullOrWhiteSpace(directory)) continue;
+
+                string fullPath = (!Path.IsPathRooted(directory)
+                    ? Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), directory))
+                    : directory).TrimEnd('*');
+
+                if (!Directory.Exists(fullPath)) continue;
+
+                if (directory.EndsWith("*", StringComparison.Ordinal))
+                    dirs.AddRange(Directory.GetDirectories(fullPath));
+                else
+                    dirs.Add(fullPath);
+            }
+
+            // The module's name must be unique.
+            var uniqueModules = new HashSet<string>();
+
+            return dirs.SelectMany(d => Directory.EnumerateFiles(d))
+                .Where(m => IsAssembly(m) && uniqueModules.Add(Path.GetFileName(m)))
+                .ToArray();
         }
 
         public static bool HasPdb(string module)
@@ -31,8 +65,13 @@ namespace Coverlet.Core.Helpers
                     if (entry.Type == DebugDirectoryEntryType.CodeView)
                     {
                         var codeViewData = peReader.ReadCodeViewDebugDirectoryData(entry);
-                        var peDirectory = Path.GetDirectoryName(module);
-                        return File.Exists(Path.Combine(peDirectory, Path.GetFileName(codeViewData.Path)));
+                        if (codeViewData.Path == $"{Path.GetFileNameWithoutExtension(module)}.pdb")
+                        {
+                            // PDB is embedded
+                            return true;
+                        }
+
+                        return File.Exists(codeViewData.Path);
                     }
                 }
 
@@ -43,12 +82,20 @@ namespace Coverlet.Core.Helpers
         public static void BackupOriginalModule(string module, string identifier)
         {
             var backupPath = GetBackupPath(module, identifier);
-            File.Copy(module, backupPath);
+            var backupSymbolPath = Path.ChangeExtension(backupPath, ".pdb");
+            File.Copy(module, backupPath, true);
+
+            var symbolFile = Path.ChangeExtension(module, ".pdb");
+            if (File.Exists(symbolFile))
+            {
+                File.Copy(symbolFile, backupSymbolPath, true);
+            }
         }
 
         public static void RestoreOriginalModule(string module, string identifier)
         {
             var backupPath = GetBackupPath(module, identifier);
+            var backupSymbolPath = Path.ChangeExtension(backupPath, ".pdb");
 
             // Restore the original module - retry up to 10 times, since the destination file could be locked
             // See: https://github.com/tonerdo/coverlet/issues/25
@@ -58,6 +105,12 @@ namespace Coverlet.Core.Helpers
             {
                 File.Copy(backupPath, module, true);
                 File.Delete(backupPath);
+            }, retryStrategy, 10);
+
+            RetryHelper.Retry(() =>
+            {
+                File.Copy(backupSymbolPath, Path.ChangeExtension(module, ".pdb"), true);
+                File.Delete(backupSymbolPath);
             }, retryStrategy, 10);
         }
 
@@ -200,7 +253,7 @@ namespace Coverlet.Core.Helpers
                     {
                         matcherDict.Add(root, new Matcher());
                     }
-                    matcherDict[root].AddInclude(excludeRule.Substring(root.Length));
+                    matcherDict[root].AddInclude(Path.GetFullPath(excludeRule).Substring(root.Length));
                 }
                 else
                 {
@@ -272,6 +325,11 @@ namespace Coverlet.Core.Helpers
 
         private static bool IsAssembly(string filePath)
         {
+            Debug.Assert(filePath != null);
+
+            if (!(filePath.EndsWith(".exe") || filePath.EndsWith(".dll")))
+                return false;
+
             try
             {
                 AssemblyName.GetAssemblyName(filePath);

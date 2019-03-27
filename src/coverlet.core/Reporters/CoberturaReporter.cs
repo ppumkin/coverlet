@@ -10,6 +10,8 @@ namespace Coverlet.Core.Reporters
 {
     public class CoberturaReporter : IReporter
     {
+        public ReporterOutputType OutputType => ReporterOutputType.File;
+
         public string Format => "cobertura";
 
         public string Extension => "cobertura.xml";
@@ -29,8 +31,7 @@ namespace Coverlet.Core.Reporters
             coverage.Add(new XAttribute("timestamp", ((int)(DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalSeconds).ToString()));
 
             XElement sources = new XElement("sources");
-            var basePath = GetBasePath(result.Modules);
-            sources.Add(new XElement("source", basePath));
+            sources.Add(new XElement("source", string.Empty));
 
             XElement packages = new XElement("packages");
             foreach (var module in result.Modules)
@@ -39,7 +40,7 @@ namespace Coverlet.Core.Reporters
                 package.Add(new XAttribute("name", Path.GetFileNameWithoutExtension(module.Key)));
                 package.Add(new XAttribute("line-rate", summary.CalculateLineCoverage(module.Value).Percent.ToString()));
                 package.Add(new XAttribute("branch-rate", summary.CalculateBranchCoverage(module.Value).Percent.ToString()));
-                package.Add(new XAttribute("complexity", "0"));
+                package.Add(new XAttribute("complexity", summary.CalculateCyclomaticComplexity(module.Value).ToString()));
 
                 XElement classes = new XElement("classes");
                 foreach (var document in module.Value)
@@ -48,10 +49,10 @@ namespace Coverlet.Core.Reporters
                     {
                         XElement @class = new XElement("class");
                         @class.Add(new XAttribute("name", cls.Key));
-                        @class.Add(new XAttribute("filename", GetRelativePathFromBase(basePath, document.Key)));
+                        @class.Add(new XAttribute("filename", document.Key));
                         @class.Add(new XAttribute("line-rate", summary.CalculateLineCoverage(cls.Value).Percent.ToString()));
                         @class.Add(new XAttribute("branch-rate", summary.CalculateBranchCoverage(cls.Value).Percent.ToString()));
-                        @class.Add(new XAttribute("complexity", "0"));
+                        @class.Add(new XAttribute("complexity", summary.CalculateCyclomaticComplexity(cls.Value).ToString()));
 
                         XElement classLines = new XElement("lines");
                         XElement methods = new XElement("methods");
@@ -81,7 +82,7 @@ namespace Coverlet.Core.Reporters
                                 {
                                     var branches = meth.Value.Branches.Where(b => b.Line == ln.Key).ToList();
                                     var branchInfoCoverage = summary.CalculateBranchCoverage(branches);
-                                    line.Add(new XAttribute("condition-coverage", $"{branchInfoCoverage.Percent*100}% ({branchInfoCoverage.Covered}/{branchInfoCoverage.Total})"));
+                                    line.Add(new XAttribute("condition-coverage", $"{branchInfoCoverage.Percent * 100}% ({branchInfoCoverage.Covered}/{branchInfoCoverage.Total})"));
                                     XElement conditions = new XElement("conditions");
                                     var byOffset = branches.GroupBy(b => b.Offset).ToDictionary(b => b.Key, b => b.ToList());
                                     foreach (var entry in byOffset)
@@ -129,34 +130,5 @@ namespace Coverlet.Core.Reporters
 
             return Encoding.UTF8.GetString(stream.ToArray());
         }
-
-        private string GetBasePath(Modules modules)
-        {
-            List<string> sources = new List<string>();
-            string path = string.Empty;
-
-            foreach (var module in modules)
-            {
-                sources.AddRange(
-                    module.Value.Select(d => Path.GetDirectoryName(d.Key)));
-            }
-
-            sources = sources.Distinct().ToList();
-            var segments = sources[0].Split(Path.DirectorySeparatorChar);
-
-            foreach (var segment in segments)
-            {
-                var startsWith = sources.All(s => s.StartsWith(path + segment));
-                if (!startsWith)
-                    break;
-
-                path += segment + Path.DirectorySeparatorChar;
-            }
-
-            return path;
-        }
-
-        private string GetRelativePathFromBase(string basePath, string path)
-            => basePath == string.Empty ? path : path.Replace(basePath, string.Empty);
     }
 }

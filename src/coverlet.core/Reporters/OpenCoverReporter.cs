@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -9,6 +10,8 @@ namespace Coverlet.Core.Reporters
 {
     public class OpenCoverReporter : IReporter
     {
+        public ReporterOutputType OutputType => ReporterOutputType.File;
+
         public string Format => "opencover";
 
         public string Extension => "opencover.xml";
@@ -68,13 +71,14 @@ namespace Coverlet.Core.Reporters
 
                             var methLineCoverage = summary.CalculateLineCoverage(meth.Value.Lines);
                             var methBranchCoverage = summary.CalculateBranchCoverage(meth.Value.Branches);
-                            
+                            var methCyclomaticComplexity = summary.CalculateCyclomaticComplexity(meth.Value.Branches);
+
                             XElement method = new XElement("Method");
 
-                            method.Add(new XAttribute("cyclomaticComplexity", "0"));
+                            method.Add(new XAttribute("cyclomaticComplexity", methCyclomaticComplexity.ToString()));
                             method.Add(new XAttribute("nPathComplexity", "0"));
-                            method.Add(new XAttribute("sequenceCoverage", methLineCoverage.Percent.ToString()));
-                            method.Add(new XAttribute("branchCoverage", methBranchCoverage.Percent.ToString()));
+                            method.Add(new XAttribute("sequenceCoverage", Math.Round(methLineCoverage.Percent * 100, 2).ToString("G", CultureInfo.InvariantCulture)));
+                            method.Add(new XAttribute("branchCoverage", Math.Round(methBranchCoverage.Percent * 100, 2).ToString("G", CultureInfo.InvariantCulture)));
                             method.Add(new XAttribute("isConstructor", meth.Key.Contains("ctor").ToString()));
                             method.Add(new XAttribute("isGetter", meth.Key.Contains("get_").ToString()));
                             method.Add(new XAttribute("isSetter", meth.Key.Contains("set_").ToString()));
@@ -87,7 +91,7 @@ namespace Coverlet.Core.Reporters
 
                             XElement methodPoint = new XElement("MethodPoint");
                             methodPoint.Add(new XAttribute("vc", methLineCoverage.Covered.ToString()));
-                            methodPoint.Add(new XAttribute("upsid", "0"));
+                            methodPoint.Add(new XAttribute("uspid", "0"));
                             methodPoint.Add(new XAttribute(XName.Get("type", "xsi"), "SequencePoint"));
                             methodPoint.Add(new XAttribute("ordinal", j.ToString()));
                             methodPoint.Add(new XAttribute("offset", j.ToString()));
@@ -111,7 +115,7 @@ namespace Coverlet.Core.Reporters
                             {
                                 XElement sequencePoint = new XElement("SequencePoint");
                                 sequencePoint.Add(new XAttribute("vc", lines.Value.ToString()));
-                                sequencePoint.Add(new XAttribute("upsid", lines.Key.ToString()));
+                                sequencePoint.Add(new XAttribute("uspid", lines.Key.ToString()));
                                 sequencePoint.Add(new XAttribute("ordinal", k.ToString()));
                                 sequencePoint.Add(new XAttribute("sl", lines.Key.ToString()));
                                 sequencePoint.Add(new XAttribute("sc", "1"));
@@ -135,7 +139,7 @@ namespace Coverlet.Core.Reporters
                             {
                                 XElement branchPoint = new XElement("BranchPoint");
                                 branchPoint.Add(new XAttribute("vc", branche.Hits.ToString()));
-                                branchPoint.Add(new XAttribute("upsid", branche.Line.ToString()));
+                                branchPoint.Add(new XAttribute("uspid", branche.Line.ToString()));
                                 branchPoint.Add(new XAttribute("ordinal", branche.Ordinal.ToString()));
                                 branchPoint.Add(new XAttribute("path", branche.Path.ToString()));
                                 branchPoint.Add(new XAttribute("offset", branche.Offset.ToString()));
@@ -154,10 +158,10 @@ namespace Coverlet.Core.Reporters
                             methodSummary.Add(new XAttribute("visitedSequencePoints", methLineCoverage.Covered.ToString()));
                             methodSummary.Add(new XAttribute("numBranchPoints", methBranchCoverage.Total.ToString()));
                             methodSummary.Add(new XAttribute("visitedBranchPoints", methBranchCoverage.Covered.ToString()));
-                            methodSummary.Add(new XAttribute("sequenceCoverage", methLineCoverage.Percent.ToString()));
-                            methodSummary.Add(new XAttribute("branchCoverage", methBranchCoverage.Percent.ToString()));
-                            methodSummary.Add(new XAttribute("maxCyclomaticComplexity", "0"));
-                            methodSummary.Add(new XAttribute("minCyclomaticComplexity", "0"));
+                            methodSummary.Add(new XAttribute("sequenceCoverage", Math.Round(methLineCoverage.Percent * 100, 2).ToString("G", CultureInfo.InvariantCulture)));
+                            methodSummary.Add(new XAttribute("branchCoverage", Math.Round(methBranchCoverage.Percent * 100, 2).ToString("G", CultureInfo.InvariantCulture)));
+                            methodSummary.Add(new XAttribute("maxCyclomaticComplexity", methCyclomaticComplexity.ToString()));
+                            methodSummary.Add(new XAttribute("minCyclomaticComplexity", methCyclomaticComplexity.ToString()));
                             methodSummary.Add(new XAttribute("visitedClasses", "0"));
                             methodSummary.Add(new XAttribute("numClasses", "0"));
                             methodSummary.Add(new XAttribute("visitedMethods", methodVisited ? "1" : "0"));
@@ -181,15 +185,17 @@ namespace Coverlet.Core.Reporters
                         var classLineCoverage = summary.CalculateLineCoverage(cls.Value);
                         var classBranchCoverage = summary.CalculateBranchCoverage(cls.Value);
                         var classMethodCoverage = summary.CalculateMethodCoverage(cls.Value);
+                        var classMaxCyclomaticComplexity = summary.CalculateMaxCyclomaticComplexity(cls.Value);
+                        var classMinCyclomaticComplexity = summary.CalculateMinCyclomaticComplexity(cls.Value);
 
                         classSummary.Add(new XAttribute("numSequencePoints", classLineCoverage.Total.ToString()));
                         classSummary.Add(new XAttribute("visitedSequencePoints", classLineCoverage.Covered.ToString()));
                         classSummary.Add(new XAttribute("numBranchPoints", classBranchCoverage.Total.ToString()));
                         classSummary.Add(new XAttribute("visitedBranchPoints", classBranchCoverage.Covered.ToString()));
-                        classSummary.Add(new XAttribute("sequenceCoverage", classLineCoverage.Percent.ToString()));
-                        classSummary.Add(new XAttribute("branchCoverage", classBranchCoverage.Percent.ToString()));
-                        classSummary.Add(new XAttribute("maxCyclomaticComplexity", "0"));
-                        classSummary.Add(new XAttribute("minCyclomaticComplexity", "0"));
+                        classSummary.Add(new XAttribute("sequenceCoverage", Math.Round(classLineCoverage.Percent * 100, 2).ToString("G", CultureInfo.InvariantCulture)));
+                        classSummary.Add(new XAttribute("branchCoverage", Math.Round(classBranchCoverage.Percent * 100, 2).ToString("G", CultureInfo.InvariantCulture)));
+                        classSummary.Add(new XAttribute("maxCyclomaticComplexity", classMaxCyclomaticComplexity.ToString()));
+                        classSummary.Add(new XAttribute("minCyclomaticComplexity", classMinCyclomaticComplexity.ToString()));
                         classSummary.Add(new XAttribute("visitedClasses", classVisited ? "1" : "0"));
                         classSummary.Add(new XAttribute("numClasses", "1"));
                         classSummary.Add(new XAttribute("visitedMethods", classMethodCoverage.Covered.ToString()));
@@ -209,16 +215,18 @@ namespace Coverlet.Core.Reporters
             }
 
             var moduleLineCoverage = summary.CalculateLineCoverage(result.Modules);
-            var moduleBranchCoverage = summary.CalculateLineCoverage(result.Modules);
+            var moduleBranchCoverage = summary.CalculateBranchCoverage(result.Modules);
+            var moduleMaxCyclomaticComplexity = summary.CalculateMaxCyclomaticComplexity(result.Modules);
+            var moduleMinCyclomaticComplexity = summary.CalculateMinCyclomaticComplexity(result.Modules);
 
             coverageSummary.Add(new XAttribute("numSequencePoints", moduleLineCoverage.Total.ToString()));
             coverageSummary.Add(new XAttribute("visitedSequencePoints", moduleLineCoverage.Covered.ToString()));
             coverageSummary.Add(new XAttribute("numBranchPoints", moduleBranchCoverage.Total.ToString()));
             coverageSummary.Add(new XAttribute("visitedBranchPoints", moduleBranchCoverage.Covered.ToString()));
-            coverageSummary.Add(new XAttribute("sequenceCoverage", moduleLineCoverage.Percent.ToString()));
-            coverageSummary.Add(new XAttribute("branchCoverage", moduleBranchCoverage.Percent.ToString()));
-            coverageSummary.Add(new XAttribute("maxCyclomaticComplexity", "0"));
-            coverageSummary.Add(new XAttribute("minCyclomaticComplexity", "0"));
+            coverageSummary.Add(new XAttribute("sequenceCoverage", Math.Round(moduleLineCoverage.Percent * 100, 2).ToString("G", CultureInfo.InvariantCulture)));
+            coverageSummary.Add(new XAttribute("branchCoverage", Math.Round(moduleBranchCoverage.Percent * 100, 2).ToString("G", CultureInfo.InvariantCulture)));
+            coverageSummary.Add(new XAttribute("maxCyclomaticComplexity", moduleMaxCyclomaticComplexity.ToString()));
+            coverageSummary.Add(new XAttribute("minCyclomaticComplexity", moduleMinCyclomaticComplexity.ToString()));
             coverageSummary.Add(new XAttribute("visitedClasses", visitedClasses.ToString()));
             coverageSummary.Add(new XAttribute("numClasses", numClasses.ToString()));
             coverageSummary.Add(new XAttribute("visitedMethods", visitedMethods.ToString()));

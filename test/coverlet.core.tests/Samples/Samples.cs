@@ -10,7 +10,7 @@ using Coverlet.Core.Attributes;
 namespace Coverlet.Core.Samples.Tests
 {
     class ConstructorNotDeclaredClass
-    {        
+    {
     }
     class DeclaredConstructorClass
     {
@@ -20,7 +20,7 @@ namespace Coverlet.Core.Samples.Tests
         {
             if (input.Contains("test")) return true;
             return false;
-        }        
+        }
 
         public bool HasTwoDecisions(string input)
         {
@@ -109,7 +109,7 @@ namespace Coverlet.Core.Samples.Tests
             string value;
             try
             {
-                
+
             }
             finally
             {
@@ -122,6 +122,14 @@ namespace Coverlet.Core.Samples.Tests
             return value;
         }
 
+        /// <summary>
+        /// This method is used by a unit test that verifies the behavior of the instrumentation process on an assembly
+        /// which is not instrumented. Excluding this method from code coverage prevents the bytecode for this reference
+        /// method from getting modified prior to test execution so it retains its original form for the test. This is
+        /// not a problem for the test because the instrumentation process only runs on assemblies which have not
+        /// already been instrumented.
+        /// </summary>
+        [ExcludeFromCodeCoverage]
         public void HasSimpleTaskWithLambda()
         {
             var t = new Task(() => { });
@@ -141,7 +149,7 @@ namespace Coverlet.Core.Samples.Tests
         public void Method()
         {
             var s = new ObservableCollection<string>();
-            var x = (from a in s select new {a});
+            var x = (from a in s select new { a });
         }
 
         public object Property
@@ -161,7 +169,7 @@ namespace Coverlet.Core.Samples.Tests
         {
             yield return "one";
             yield return "two";
-        } 
+        }
     }
 
     [ExcludeFromCoverage]
@@ -170,7 +178,7 @@ namespace Coverlet.Core.Samples.Tests
 
         public string Method(string input)
         {
-            if(string.IsNullOrEmpty(input))
+            if (string.IsNullOrEmpty(input))
                 throw new ArgumentException("Cannot be empty", nameof(input));
 
             return input;
@@ -187,6 +195,46 @@ namespace Coverlet.Core.Samples.Tests
                 throw new ArgumentException("Cannot be empty", nameof(input));
 
             return input;
+        }
+    }
+
+    [Obsolete]
+    public class ClassExcludedByObsoleteAttr
+    {
+
+        public string Method(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+                throw new ArgumentException("Cannot be empty", nameof(input));
+
+            return input;
+        }
+    }
+
+    public class ExceptionFilter
+    {
+        public void Test()
+        {
+            try
+            {
+                int a = 0;
+                int b = 1;
+                int c = b / a;
+            }
+            catch (Exception ex) when (True() && False())
+            {
+                Console.WriteLine(ex.Message);
+            }
+        }
+
+        public bool True()
+        {
+            return true;
+        }
+
+        public bool False()
+        {
+            return false;
         }
     }
 }

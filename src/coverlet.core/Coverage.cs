@@ -5,8 +5,10 @@ using System.Linq;
 
 using Coverlet.Core.Helpers;
 using Coverlet.Core.Instrumentation;
+using Coverlet.Core.Logging;
 
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace Coverlet.Core
 {
@@ -14,10 +16,15 @@ namespace Coverlet.Core
     {
         private string _module;
         private string _identifier;
-        private string[] _excludeFilters;
         private string[] _includeFilters;
+        private string[] _includeDirectories;
+        private string[] _excludeFilters;
         private string[] _excludedSourceFiles;
+        private string[] _excludeAttributes;
+        private bool _singleHit;
         private string _mergeWith;
+        private bool _useSourceLink;
+        private ILogger _logger;
         private List<InstrumenterResult> _results;
 
         public string Identifier
@@ -25,13 +32,27 @@ namespace Coverlet.Core
             get { return _identifier; }
         }
 
-        public Coverage(string module, string[] excludeFilters, string[] includeFilters, string[] excludedSourceFiles, string mergeWith)
+        public Coverage(string module,
+            string[] includeFilters,
+            string[] includeDirectories,
+            string[] excludeFilters,
+            string[] excludedSourceFiles,
+            string[] excludeAttributes,
+            bool singleHit,
+            string mergeWith,
+            bool useSourceLink,
+            ILogger logger)
         {
             _module = module;
-            _excludeFilters = excludeFilters;
             _includeFilters = includeFilters;
+            _includeDirectories = includeDirectories ?? Array.Empty<string>();
+            _excludeFilters = excludeFilters;
             _excludedSourceFiles = excludedSourceFiles;
+            _excludeAttributes = excludeAttributes;
+            _singleHit = singleHit;
             _mergeWith = mergeWith;
+            _useSourceLink = useSourceLink;
+            _logger = logger;
 
             _identifier = Guid.NewGuid().ToString();
             _results = new List<InstrumenterResult>();
@@ -39,23 +60,42 @@ namespace Coverlet.Core
 
         public void PrepareModules()
         {
-            string[] modules = InstrumentationHelper.GetCoverableModules(_module);
-            string[] excludes =  InstrumentationHelper.GetExcludedFiles(_excludedSourceFiles);
+            string[] modules = InstrumentationHelper.GetCoverableModules(_module, _includeDirectories);
+            string[] excludes = InstrumentationHelper.GetExcludedFiles(_excludedSourceFiles);
+
+            Array.ForEach(_excludeFilters ?? Array.Empty<string>(), filter => _logger.LogInformation($"Excluded module filter '{filter}'"));
+            Array.ForEach(_includeFilters ?? Array.Empty<string>(), filter => _logger.LogInformation($"Included module filter '{filter}'"));
+            Array.ForEach(excludes ?? Array.Empty<string>(), filter => _logger.LogInformation($"Excluded source files '{filter}'"));
+
             _excludeFilters = _excludeFilters?.Where(f => InstrumentationHelper.IsValidFilterExpression(f)).ToArray();
             _includeFilters = _includeFilters?.Where(f => InstrumentationHelper.IsValidFilterExpression(f)).ToArray();
 
             foreach (var module in modules)
             {
-                if (InstrumentationHelper.IsModuleExcluded(module, _excludeFilters)
-                    || !InstrumentationHelper.IsModuleIncluded(module, _includeFilters))
+                if (InstrumentationHelper.IsModuleExcluded(module, _excludeFilters) ||
+                    !InstrumentationHelper.IsModuleIncluded(module, _includeFilters))
+                {
+                    _logger.LogInformation($"Excluded module: '{module}'");
                     continue;
+                }
 
-                var instrumenter = new Instrumenter(module, _identifier, _excludeFilters, _includeFilters, excludes);
+                var instrumenter = new Instrumenter(module, _identifier, _excludeFilters, _includeFilters, excludes, _excludeAttributes, _singleHit, _logger);
                 if (instrumenter.CanInstrument())
                 {
                     InstrumentationHelper.BackupOriginalModule(module, _identifier);
-                    var result = instrumenter.Instrument();
-                    _results.Add(result);
+
+                    // Guard code path and restore if instrumentation fails.
+                    try
+                    {
+                        var result = instrumenter.Instrument();
+                        _results.Add(result);
+                        _logger.LogInformation($"Instrumented module: '{module}'");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning($"Unable to instrument module: {module} because : {ex.Message}");
+                        InstrumentationHelper.RestoreOriginalModule(module, _identifier);
+                    }
                 }
             }
         }
@@ -113,14 +153,14 @@ namespace Coverlet.Core
                                 if (methods.TryGetValue(branch.Method, out Method method))
                                 {
                                     method.Branches.Add(new BranchInfo
-                                        { Line = branch.Number, Hits = branch.Hits, Offset = branch.Offset, EndOffset = branch.EndOffset, Path = branch.Path, Ordinal = branch.Ordinal }
+                                    { Line = branch.Number, Hits = branch.Hits, Offset = branch.Offset, EndOffset = branch.EndOffset, Path = branch.Path, Ordinal = branch.Ordinal }
                                     );
                                 }
                                 else
                                 {
                                     documents[doc.Path][branch.Class].Add(branch.Method, new Method());
                                     documents[doc.Path][branch.Class][branch.Method].Branches.Add(new BranchInfo
-                                        { Line = branch.Number, Hits = branch.Hits, Offset = branch.Offset, EndOffset = branch.EndOffset, Path = branch.Path, Ordinal = branch.Ordinal }
+                                    { Line = branch.Number, Hits = branch.Hits, Offset = branch.Offset, EndOffset = branch.EndOffset, Path = branch.Path, Ordinal = branch.Ordinal }
                                     );
                                 }
                             }
@@ -129,7 +169,7 @@ namespace Coverlet.Core
                                 documents[doc.Path].Add(branch.Class, new Methods());
                                 documents[doc.Path][branch.Class].Add(branch.Method, new Method());
                                 documents[doc.Path][branch.Class][branch.Method].Branches.Add(new BranchInfo
-                                    { Line = branch.Number, Hits = branch.Hits, Offset = branch.Offset, EndOffset = branch.EndOffset, Path = branch.Path, Ordinal = branch.Ordinal }
+                                { Line = branch.Number, Hits = branch.Hits, Offset = branch.Offset, EndOffset = branch.EndOffset, Path = branch.Path, Ordinal = branch.Ordinal }
                                 );
                             }
                         }
@@ -139,18 +179,19 @@ namespace Coverlet.Core
                             documents[doc.Path].Add(branch.Class, new Methods());
                             documents[doc.Path][branch.Class].Add(branch.Method, new Method());
                             documents[doc.Path][branch.Class][branch.Method].Branches.Add(new BranchInfo
-                                { Line = branch.Number, Hits = branch.Hits, Offset = branch.Offset, EndOffset = branch.EndOffset, Path = branch.Path, Ordinal = branch.Ordinal }
+                            { Line = branch.Number, Hits = branch.Hits, Offset = branch.Offset, EndOffset = branch.EndOffset, Path = branch.Path, Ordinal = branch.Ordinal }
                             );
                         }
                     }
                 }
 
-                modules.Add(result.ModulePath, documents);
+                modules.Add(Path.GetFileName(result.ModulePath), documents);
                 InstrumentationHelper.RestoreOriginalModule(result.ModulePath, _identifier);
             }
 
-            var coverageResult = new CoverageResult { Identifier = _identifier, Modules = modules };
-            if (!string.IsNullOrEmpty(_mergeWith) && !string.IsNullOrWhiteSpace(_mergeWith))
+            var coverageResult = new CoverageResult { Identifier = _identifier, Modules = modules, InstrumentedResults = _results };
+
+            if (!string.IsNullOrEmpty(_mergeWith) && !string.IsNullOrWhiteSpace(_mergeWith) && File.Exists(_mergeWith))
             {
                 string json = File.ReadAllText(_mergeWith);
                 coverageResult.Merge(JsonConvert.DeserializeObject<Modules>(json));
@@ -165,11 +206,20 @@ namespace Coverlet.Core
             {
                 if (!File.Exists(result.HitsFilePath))
                 {
-                    // File not instrumented, or nothing in it called.  Warn about this?
+                    _logger.LogWarning($"Hits file:'{result.HitsFilePath}' not found for module: '{result.Module}'");
                     continue;
                 }
 
                 List<Document> documents = result.Documents.Values.ToList();
+                if (_useSourceLink && result.SourceLink != null)
+                {
+                    var jObject = JObject.Parse(result.SourceLink)["documents"];
+                    var sourceLinkDocuments = JsonConvert.DeserializeObject<Dictionary<string, string>>(jObject.ToString());
+                    foreach (var document in documents)
+                    {
+                        document.Path = GetSourceLinkUrl(sourceLinkDocuments, document.Path);
+                    }
+                }
 
                 using (var fs = new FileStream(result.HitsFilePath, FileMode.Open))
                 using (var br = new BinaryReader(fs))
@@ -183,9 +233,7 @@ namespace Coverlet.Core
                     for (int i = 0; i < hitCandidatesCount; ++i)
                     {
                         var hitLocation = result.HitCandidates[i];
-
                         var document = documentsList[hitLocation.docIndex];
-
                         int hits = br.ReadInt32();
 
                         if (hitLocation.isBranch)
@@ -204,8 +252,92 @@ namespace Coverlet.Core
                     }
                 }
 
+                // for MoveNext() compiler autogenerated method we need to patch false positive (IAsyncStateMachine for instance) 
+                // we'll remove all MoveNext() not covered branch
+                foreach (var document in result.Documents)
+                {
+                    List<KeyValuePair<(int, int), Branch>> branchesToRemove = new List<KeyValuePair<(int, int), Branch>>();
+                    foreach (var branch in document.Value.Branches)
+                    {
+                        //if one branch is covered we search the other one only if it's not covered
+                        if (IsAsyncStateMachineMethod(branch.Value.Method) && branch.Value.Hits > 0)
+                        {
+                            foreach (var moveNextBranch in document.Value.Branches)
+                            {
+                                if (moveNextBranch.Value.Method == branch.Value.Method && moveNextBranch.Value != branch.Value && moveNextBranch.Value.Hits == 0)
+                                {
+                                    branchesToRemove.Add(moveNextBranch);
+                                }
+                            }
+                        }
+                    }
+                    foreach (var branchToRemove in branchesToRemove)
+                    {
+                        document.Value.Branches.Remove(branchToRemove.Key);
+                    }
+                }
+
                 InstrumentationHelper.DeleteHitsFile(result.HitsFilePath);
             }
+        }
+
+        private bool IsAsyncStateMachineMethod(string method)
+        {
+            if (!method.EndsWith("::MoveNext()"))
+            {
+                return false;
+            }
+
+            foreach (var instrumentationResult in _results)
+            {
+                if (instrumentationResult.AsyncMachineStateMethod.Contains(method))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private string GetSourceLinkUrl(Dictionary<string, string> sourceLinkDocuments, string document)
+        {
+            if (sourceLinkDocuments.TryGetValue(document, out string url))
+            {
+                return url;
+            }
+
+            var keyWithBestMatch = string.Empty;
+            var relativePathOfBestMatch = string.Empty;
+
+            foreach (var sourceLinkDocument in sourceLinkDocuments)
+            {
+                string key = sourceLinkDocument.Key;
+                if (Path.GetFileName(key) != "*") continue;
+
+                if (!Path.GetDirectoryName(document).StartsWith(Path.GetDirectoryName(key) + Path.DirectorySeparatorChar))
+                    continue;
+
+                var relativePath = Path.GetDirectoryName(document).Substring(Path.GetDirectoryName(key).Length + 1);
+
+                if (relativePathOfBestMatch.Length == 0)
+                {
+                    keyWithBestMatch = sourceLinkDocument.Key;
+                    relativePathOfBestMatch = relativePath;
+                }
+
+                if (relativePath.Length < relativePathOfBestMatch.Length)
+                {
+                    keyWithBestMatch = sourceLinkDocument.Key;
+                    relativePathOfBestMatch = relativePath;
+                }
+            }
+
+            relativePathOfBestMatch = relativePathOfBestMatch == "." ? string.Empty : relativePathOfBestMatch;
+
+            string replacement = Path.Combine(relativePathOfBestMatch, Path.GetFileName(document));
+            replacement = replacement.Replace('\\', '/');
+
+            url = sourceLinkDocuments[keyWithBestMatch];
+            return url.Replace("*", replacement);
         }
     }
 }

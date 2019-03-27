@@ -9,10 +9,15 @@ namespace Coverlet.MSbuild.Tasks
     {
         private static Coverage _coverage;
         private string _path;
-        private string _exclude;
         private string _include;
+        private string _includeDirectory;
+        private string _exclude;
         private string _excludeByFile;
+        private string _excludeByAttribute;
+        private bool _singleHit;
         private string _mergeWith;
+        private bool _useSourceLink;
+        private readonly MSBuildLogger _logger;
 
         internal static Coverage Coverage
         {
@@ -25,17 +30,23 @@ namespace Coverlet.MSbuild.Tasks
             get { return _path; }
             set { _path = value; }
         }
-        
-        public string Exclude
-        {
-            get { return _exclude; }
-            set { _exclude = value; }
-        }
 
         public string Include
         {
             get { return _include; }
             set { _include = value; }
+        }
+
+        public string IncludeDirectory
+        {
+            get { return _includeDirectory; }
+            set { _includeDirectory = value; }
+        }
+
+        public string Exclude
+        {
+            get { return _exclude; }
+            set { _exclude = value; }
         }
 
         public string ExcludeByFile
@@ -44,26 +55,51 @@ namespace Coverlet.MSbuild.Tasks
             set { _excludeByFile = value; }
         }
 
+        public string ExcludeByAttribute
+        {
+            get { return _excludeByAttribute; }
+            set { _excludeByAttribute = value; }
+        }
+
+        public bool SingleHit
+        {
+            get { return _singleHit; }
+            set { _singleHit = value; }
+        }
+
         public string MergeWith
         {
             get { return _mergeWith; }
             set { _mergeWith = value; }
         }
 
+        public bool UseSourceLink
+        {
+            get { return _useSourceLink; }
+            set { _useSourceLink = value; }
+        }
+
+        public InstrumentationTask()
+        {
+            _logger = new MSBuildLogger(Log);
+        }
+
         public override bool Execute()
         {
             try
             {
-                var excludedSourceFiles = _excludeByFile?.Split(',');
-                var excludeFilters = _exclude?.Split(',');
                 var includeFilters = _include?.Split(',');
+                var includeDirectories = _includeDirectory?.Split(',');
+                var excludeFilters = _exclude?.Split(',');
+                var excludedSourceFiles = _excludeByFile?.Split(',');
+                var excludeAttributes = _excludeByAttribute?.Split(',');
 
-                _coverage = new Coverage(_path, excludeFilters, includeFilters, excludedSourceFiles, _mergeWith);
+                _coverage = new Coverage(_path, includeFilters, includeDirectories, excludeFilters, excludedSourceFiles, excludeAttributes, _singleHit, _mergeWith, _useSourceLink, _logger);
                 _coverage.PrepareModules();
             }
             catch (Exception ex)
             {
-                Log.LogErrorFromException(ex);
+                _logger.LogError(ex);
                 return false;
             }
 
