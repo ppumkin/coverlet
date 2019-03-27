@@ -1,0 +1,19 @@
+﻿<?xml version="1.0"?>
+<package  xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+  <metadata>    
+    <id>piotrkula.coverlet.core</id>
+    <version>1.5.2</version>
+    <title>Coverlet.Core package for integrators</title>
+    <authors>tonerdo</authors>
+    <owners>Piotr Kula</owners>
+    <license type="expression">MIT</license>
+    <projectUrl>https://github.com/ppumkin/PrestoCoverage</projectUrl>
+    <iconUrl>https://piotrkula.gallerycdn.vsassets.io/extensions/piotrkula/prestocoverage/1.16.4/1553634175846/Microsoft.VisualStudio.Services.Icons.Default</iconUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>This is a fork following the Coverlet project but only building and packaging the Coverlet.Core aspect</description>
+    <releaseNotes></releaseNotes>
+    <copyright></copyright>
+    <tags>coverage testing unit-test</tags>
+    <summary>This is a fork following the Coverlet project but only building and packaging the Coverlet.Core aspect</summary>
+  </metadata>
+</package>
