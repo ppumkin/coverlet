@@ -7,7 +7,7 @@
     <authors>tonerdo</authors>
     <owners>Piotr Kula</owners>
     <license type="expression">MIT</license>
-    <projectUrl>https://github.com/ppumkin/PrestoCoverage</projectUrl>
+    projectUrl>https://github.com/ppumkin/coverlet</projectUrl>
     <iconUrl>https://piotrkula.gallerycdn.vsassets.io/extensions/piotrkula/prestocoverage/1.16.4/1553634175846/Microsoft.VisualStudio.Services.Icons.Default</iconUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>This is a fork following the Coverlet project but only building and packaging the Coverlet.Core aspect</description>
@@ -24,7 +24,4 @@
       </group>
     </dependencies>
   </metadata>
-  <files>
-     <file src="bin\**\Release\netstandard2.0\coverlet.core.dll" target="lib/netstandard2.0" />
-  </files>
 </package>
